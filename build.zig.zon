@@ -1,0 +1,40 @@
+.{
+    .name = "zvim",
+    // This is a [Semantic Version](https://semver.org/).
+    // In a future version of Zig it will be used for package deduplication.
+    .version = "0.0.0",
+
+    // This field is optional.
+    // This is currently advisory only; Zig does not yet do anything
+    // with this value.
+    //.minimum_zig_version = "0.11.0",
+
+    // This field is optional.
+    // Each dependency must either provide a `url` and `hash`, or a `path`.
+    // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
+    // Once all dependencies are fetched, `zig build` no longer requires
+    // internet connectivity.
+    .dependencies = .{
+        .vaxis = .{
+            .url = "git+https://github.com/rockorager/libvaxis?ref=main#fcdeb321feccc1b2b62391c1e257c385a799810e",
+            .hash = "1220be1b2c1cf8809459629fde0d7ff2eb1bca854a99e4ac69fa19e03afec9428460",
+        },
+        .spice = .{
+            .url = "git+https://github.com/judofyr/spice?ref=main#1f551556de73be15f92ebc2f98ef0d1236211b49",
+            .hash = "12200bbc6a677bb63707204b85e7171d1a2555da89fd939aeefc61eb83b757a86b74",
+        },
+    },
+    .paths = .{
+        // This makes *all* files, recursively, included in this package. It is generally
+        // better to explicitly list the files and directories instead, to insure that
+        // fetching from tarballs, file system paths, and version control all result
+        // in the same contents hash.
+        "",
+        // For example...
+        //"build.zig",
+        //"build.zig.zon",
+        //"src",
+        //"LICENSE",
+        //"README.md",
+    },
+}

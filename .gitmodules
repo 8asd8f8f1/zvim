@@ -1,0 +1,6 @@
+[submodule "ext/notcurses"]
+	path = ext/notcurses
+	url = https://github.com/dankamongmen/notcurses
+[submodule "ext/vaxis"]
+	path = ext/vaxis
+	url = https://github.com/rockorager/libvaxis/
