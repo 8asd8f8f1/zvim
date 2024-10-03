@@ -9,11 +9,12 @@ pub const Segment = struct {
     const Type = enum { NORMAL, CURRENT, BACK };
     const Style = enum { WINDOWS, UNIX };
 
-    path: []u8 = undefined,
-    segments: []u8 = undefined,
-    begin: [*]u8 = undefined,
-    end: [*]u8 = undefined,
+    path: []const u8 = undefined,
+    segments: []const u8 = undefined,
+    begin: [*]const u8 = undefined,
+    end: [*]const u8 = undefined,
     size: usize = undefined,
+
     type: Type = undefined,
     style: Style = undefined,
 };
@@ -114,7 +115,7 @@ fn find_previous_stop(begin: *u8, c: *u8) *u8 {
     return c + if (is_separator(c)) 1;
 }
 
-fn get_first_segment_without_root(path: []u8, segments: []u8, segment: *Segment) bool {
+fn get_first_segment_without_root(path: []const u8, segments: []const u8, segment: *Segment) bool {
     segment.path = path;
     segment.segments = segments;
     segment.begin = segments.ptr;
@@ -125,7 +126,8 @@ fn get_first_segment_without_root(path: []u8, segments: []u8, segment: *Segment)
         return false;
 
     var ptr = segments.ptr;
-    while (ptr < &segments[segments.len - 1] and is_separator(ptr)) : (ptr += 1)
+    // while (ptr < &segments[segments.len - 1] and is_separator(ptr)) : (ptr += 1)
+    while (ptr < (segments.ptr + segments.len - 1) and is_separator(ptr)) : (ptr += 1)
         continue;
 
     segment.begin = ptr;
@@ -147,11 +149,11 @@ fn get_last_segment_without_root(path: []const u8, segment: *Segment) bool {
     return true;
 }
 
-fn get_first_segment_joined(paths: []const []const u8, sj: *SegmentJoined) bool {
+fn get_first_segment_joined(paths: [][]const u8, sj: *SegmentJoined) bool {
     var result = false;
 
     sj.index = 0;
-    sj.paths = paths;
+    sj.paths = @constCast(paths);
 
     while (paths[sj.index].len != 0 and (res: {
         result = get_first_segment(paths[sj.index], &sj.segment) == false;
@@ -165,18 +167,32 @@ fn get_first_segment_joined(paths: []const []const u8, sj: *SegmentJoined) bool 
 fn get_next_segment_joined(sj: *SegmentJoined) bool {
     var result = false;
 
-    if (sj.paths[sj.index].len == 0)
+    if (sj.index >= sj.paths.len or sj.paths[sj.index].len == 0) {
+        // We reached already the end of all paths,
+        // so there is no other segment left.
         return false;
-
-    if (get_next_segment_joined(&sj.segment))
+    } else if (get_next_segment(&sj.segment)) {
+        // There was another segment on the current path,
+        // so we are good to continue.
         return true;
+    }
+
+    // We try to move to the next path which has a segment available.
+    // We must atleast move one further since the current path reached the end.
+    // result = false;
 
     while (true) {
         sj.index += 1;
 
+        // And we obviously have to stop this loop
+        // if there are no more paths left.
         if (sj.paths[sj.index].len == 0)
             break;
 
+        // Grab the first segment of the next path and determine whether this
+        // path has anything useful in it. There is one more thing we have to
+        // consider here - for the first time we do this we want to skip the
+        // root, but afterwards we will consider that to be part of the segments.
         result = get_first_segment_without_root(
             sj.paths[sj.index],
             sj.paths[sj.index],
@@ -187,6 +203,7 @@ fn get_next_segment_joined(sj: *SegmentJoined) bool {
             break;
     }
 
+    // Finally, report the result back to the caller.
     return result;
 }
 
@@ -270,11 +287,11 @@ fn segment_will_be_removed(sj: *SegmentJoined, absolute: bool) bool {
     var sjc: SegmentJoined = sj.*;
     const seg_type: Segment.Type = get_segment_type(&sj.segment);
 
-    switch (seg_type) {
-        .CURRENT => return true,
-        .BACK => return if (absolute) true else segment_back_will_be_removed(&sjc),
+    return switch (seg_type) {
+        .CURRENT => true,
+        .BACK => if (absolute) true else segment_back_will_be_removed(&sjc),
         .NORMAL => segment_normal_will_be_removed(&sjc),
-    }
+    };
 }
 
 fn joined_skip_invisible(sj: *SegmentJoined, absolute: bool) bool {
@@ -353,15 +370,13 @@ fn fix_root(buffer: []u8, length: usize) void {
     if (GLOBAL_PATH_STYLE != .WINDOWS)
         return;
 
-    length = @min(length, buffer.len);
-
-    for (0..length) |i| {
-        if (is_separator(&buffer[i]))
-            buffer[i] = PATH_SEPERATORS[@enumFromInt(Segment.Style.WINDOWS)];
+    for (0..@min(length, buffer.len)) |i| {
+        if (is_separator(buffer.ptr + i))
+            buffer[i] = PATH_SEPERATORS[@intFromEnum(Segment.Style.WINDOWS)];
     }
 }
 
-fn join_and_normalize_multiple(paths: []const []const u8, buffer: []u8) usize {
+fn join_and_normalize_multiple(paths: [][]const u8, buffer: []u8) usize {
     var has_segment_output = false;
     var sj = SegmentJoined{};
     var pos: usize = 0;
@@ -476,13 +491,14 @@ pub fn get_last_segment(path: []const u8, segment: *Segment) bool {
 }
 
 pub fn get_next_segment(segment: *Segment) bool {
-    var c = segment.begin + segment.size;
+    // var c = segment.begin + segment.size;
+    var c = segment.begin[segment.size..];
 
-    assert(is_separator(c));
+    assert(is_separator(c.ptr));
 
     while (true) {
         c += 1;
-        if (!is_separator(c))
+        if (!is_separator(c.ptr))
             break;
     }
 
