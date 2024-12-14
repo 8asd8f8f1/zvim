@@ -11,18 +11,210 @@ pub const Segment = struct {
 
     path: []const u8 = undefined,
     segments: []const u8 = undefined,
-    begin: [*]const u8 = undefined,
-    end: [*]const u8 = undefined,
+    begin: []const u8 = undefined,
+    end: []const u8 = undefined,
     size: usize = undefined,
 
     type: Type = undefined,
     style: Style = undefined,
+
+    /// Function to get the next segment from a path
+    pub fn getNextSegment(self: *Segment) bool {
+        var c: [*]const u8 = self.begin + self.size;
+
+        // First we jump to the end of the previous segment. It must be either
+        // the null terminator or a separator.
+        // if (c.* == 0)
+        //     return false;
+
+        // Now we skip all separators until we reach something else.
+        // Not yet guaranteed to have a segment as the string could end.
+        assert(isSeparator(c));
+        while (isSeparator(c))
+            c += 1;
+
+        // If the string ends here, there is no other segment.
+        if (c == self.begin + self.size)
+            return false;
+
+        // Safe to assume there's a segment. Store the beginning in the struct.
+        self.begin = c;
+
+        // Determine the size of the segment and store it as well.
+        c = find_next_stop(c[0..self.size]);
+        self.end = c;
+        self.size = usize(c - self.begin);
+
+        // Segment found successfully.
+        return true;
+    }
+
+    pub fn getPreviousSegment(_: *Segment) bool {
+        return false;
+    }
+
+    pub inline fn getSegmentType(self: *Self) Type {
+        return self.type;
+    }
 };
 
-const SegmentJoined = struct {
+pub const SegmentJoined = struct {
     segment: Segment = undefined,
     paths: [][]const u8 = undefined,
     index: usize = undefined,
+
+    const Self = @This();
+
+    fn getNextSegmentJoined(self: *Self) bool {
+        if (self.paths.len <= self.index) {
+            return false;
+        } else if (self.segment.getNextSegment()) {
+            return true;
+        }
+
+        var res = false;
+
+        while (true) {
+            self.index += 1;
+            if (self.paths.len >= self.index)
+                break;
+
+            result = getFirstSegmentWithoutRoot(self.paths[self.index], self.paths[self.index], &self.segment);
+
+            if (!result)
+                break;
+        }
+    }
+
+    fn getGetPreviousSegmentJoined(self: *Self) bool {
+        // It's possible that there is no initialized segment available in
+        // the struct since there are no paths. In that case we can return
+        // false, since there is no previous segment.
+        if (self.paths.len == 0) {
+            return false;
+        } else
+        // Now we try to get the previous segment from the current path.
+        // If we can do that successfully, we can let the caller know
+        // that we found one.
+        if (self.segment.getPreviousSegment()) {
+            return true;
+        }
+
+        var result = false;
+
+        while (true) {
+            if (self.index == 0)
+                break;
+
+            self.index -= 1;
+            result = switch (self.index) {
+                0 => getLastSegment(self.paths[self.index], &self.segment),
+                else => getLastSegmentWithoutRoot(self.paths[self.index], &self.segment),
+            };
+
+            if (!result)
+                break;
+        }
+
+        return result;
+    }
+
+    fn backWillBeRemoved(self: *Self) bool {
+        // We are handling back segments here. We must verify how
+        // many back segments and how many normal segments come
+        // before this one to decide whether we keep or remove it.
+        //
+        // The counter determines how many normal segments are our current
+        // segment, which will popped off before us. If the counter goes
+        // above zero it means that our segment will be popped as well.
+        var counter = 0;
+
+        // We loop over all pervious segments until we either
+        // reach the beginning, which means our segment will
+        // not be dropped or the gounter goes above zero.
+        while (self.getGetPreviousSegmentJoined()) {
+            // Now grab the type. The type determines whether we will
+            // increase or decrease the counter. We don't handle
+            // a .CURRENT frame here since it has no influence.
+            var segmentType = self.segment.getSegmentType();
+
+            switch (self.segment.getSegmentType()) {
+                // This is a normal segment. The normal
+                // segment will increase the counter since
+                // it neutralizes one back segment. If we go
+                // above zero we can return immediately.
+                .NORMAL => {
+                    counter += 1;
+                    if (counter > 0)
+                        return true;
+                },
+
+                // A .BACK segment will reduce the counter by one.
+                // We can not remove a back segment as long we are
+                // not above zero since sine we don't have the
+                // opposite normal segment which we would remove.
+                .BACK => counter -= 1,
+                else => {},
+            }
+        }
+
+        // We never got a count larger than zero,
+        // so we will keep this segment alive.
+        return false;
+    }
+
+    fn normalWillBeRemoved(self: *Self) bool {
+        // The counter determines how many segments are above our curent
+        // segment, which will popped off before us. If the counter goes
+        // below zero it means that our segment will be popped as well.
+        var counter = 0;
+
+        // We loop over all following segments until we either reach the
+        // end, which means our segment will not be dropped or the counter
+        // goes below zero.
+        while (self.getNextSegmentJoined()) {
+            // First, grab the type. The type determines whether we will
+            // increase or decrease the counter. We don't handle a .CURRENT
+            // frame here sinceit has no influence.
+            switch (self.segment.getSegmentType()) {
+                // This is a normal segment. The normal segment will increase
+                // the counter since it will be removed by a "../" before us.
+                .NORMAL => counter += 1,
+                // A .BACK segment will reduce the counter by one. If
+                // we are below zero we can return immediately.
+                .BACK => {
+                    counter -= 1;
+                    if (counter < 0)
+                        return true;
+                },
+            }
+        }
+
+        // We never got a negative counter,
+        // so we will keep this segment alive.
+        return false;
+    }
+
+    fn segmentWillBeRemoved(self: *Self, absolute: bool) bool {
+        // We copy the joined path so we don't need to modify it.
+        var sjc = self;
+
+        // First we check whether this is a .CURRENT or .BACK
+        // segment, since those will always be dropped.
+        return switch (self.segment.getNextSegment()) {
+            .CURRENT => true,
+            .BACK => if (absolute) true else sjc.backWillBeRemoved(),
+            else => sjc.normalWillBeRemoved(),
+        };
+    }
+
+    fn joinedSkipInvisible(self: *Self, absolute: bool) bool {
+        while (self.segmentWillBeRemoved(absolute)) {
+            if (!self.getNextSegmentJoined())
+                return false;
+        }
+        return true;
+    }
 };
 
 fn output_sized(buffer: []u8, position: usize, str: []const u8, length: usize) usize {
@@ -47,7 +239,7 @@ fn output_sized(buffer: []u8, position: usize, str: []const u8, length: usize) u
 }
 
 fn output_current(buffer: []u8, position: usize) usize {
-    return output_sized(buffer, position, &.{"."}, 1);
+    return output_sized(buffer, position, .{"."}[0..], 1);
 }
 
 fn output_back(buffer: []u8, position: usize) usize {
@@ -86,12 +278,12 @@ fn is_string_equal(first: []const u8, second: []const u8) bool {
     return true;
 }
 
-// fn find_next_stop(c: []const u8) []const u8 {
-//     var i = 0;
-//     while (!is_separator(c)) //: (i += 1)
-//         i += 1;
-//     return c[i..];
-// }
+fn find_next_stop(c: []const u8) []const u8 {
+    var i = 0;
+    while (!is_separator(c)) //: (i += 1)
+        i += 1;
+    return c[i..];
+}
 
 // fn find_previous_stop(begin: []const u8, c: []const u8) []const u8 {
 //     while (c.ptr > begin.ptr and !is_separator(c))
@@ -102,11 +294,21 @@ fn is_string_equal(first: []const u8, second: []const u8) bool {
 // }
 
 // fn find_next_stop(c: []const u8) *u8 {
-fn find_next_stop(c: []const u8) [*]u8 {
-    var i: usize = 0;
-    while (i < c.len and !is_separator(c.ptr)) //: (i += 1)
-        i += 1;
-    return @constCast(@ptrCast(&c[i]));
+// fn find_next_stop(c: []const u8) [*]u8 {
+//     var i: usize = 0;
+//     while (i < c.len and !is_separator(c.ptr)) //: (i += 1)
+//         i += 1;
+//     return @constCast(@ptrCast(&c[i]));
+// }
+
+fn findNextStop(buf: []const u8) []const u8 {
+    var idx = 0;
+    for (buf) |v| {
+        if (isSeperator(v))
+            break;
+        idx += 1;
+    }
+    return c[idx..];
 }
 
 fn find_previous_stop(begin: *u8, c: *u8) *u8 {
@@ -118,8 +320,10 @@ fn find_previous_stop(begin: *u8, c: *u8) *u8 {
 fn get_first_segment_without_root(path: []const u8, segments: []const u8, segment: *Segment) bool {
     segment.path = path;
     segment.segments = segments;
-    segment.begin = segments.ptr;
-    segment.end = segments.ptr;
+    // segment.begin = segments.ptr;
+    // segment.end = segments.ptr;
+    segment.begin = segments[0..];
+    segment.end = segments[(segments.len - 1)..];
     segment.size = 0;
 
     if (segments.len == 0)
@@ -548,9 +752,6 @@ pub fn get_segment_type(segment: *Segment) Segment.Type {
     return .NORMAL;
 }
 
-// pub fn change_segment(segment: *Segment, value: []const u8, buffer: []u8, buffer_size: usize) usize {}
-
-// pub fn is_separator(str: []const u8) bool {
 pub fn is_separator(str: [*]const u8) bool {
     const sep = PATH_SEPERATORS[@intFromEnum(GLOBAL_PATH_STYLE)];
 
@@ -558,6 +759,65 @@ pub fn is_separator(str: [*]const u8) bool {
         if (sep[i] == str[i])
             return true;
     return false;
+}
+
+pub fn isSeperator(str: []u8) bool {
+    const sep = comptime PATH_SEPERATORS[@intFromEnum(GLOBAL_PATH_STYLE)];
+
+    for (sep, 0..str.len) |c, i|
+        if (c == str[i])
+            return true;
+
+    return false;
+}
+
+pub fn change_segment(segment: *Segment, value: []const u8, buffer: []u8) usize {
+    // First we have to output the head, which is the whole string up to the
+    // beginning of the segment. This part of the path will just stay the same.
+    var pos: u32 = output_sized(
+        buffer[0..],
+        0,
+        segment.path,
+        @as(usize, segment.begin - segment.path.ptr),
+    );
+
+    var val_ptr: [*]const u8 = value.ptr;
+
+    // In order to trip the submitted value, we will skip any separator at the
+    // beginning of it and behave as if it was never there.
+    while (is_separator(val_ptr))
+        val_ptr += 1;
+
+    // In order to trip the submitted value, we will skip any separator at the
+    // beginning of it and behave as if it was never there.
+    var value_size = value.ptr - val_ptr;
+
+    // Since we trim separators at the beginning and in the end of the value we
+    // have to subtract from the size until there are either no more characters
+    // left or the last character is no separator.
+    while (value_size > 0 and is_separator(value.ptr + value_size - 1))
+        value_size -= 1;
+
+    // We also have to determine the tail size, which is the part of the string
+    // following the current segment. This part will not change.
+    const tail_size = segment.end;
+
+    // Now we output the tail. We have to do that, because if the buffer and the
+    // source are overlapping we would override the tail if the value is
+    // increasing in length.
+    output_sized(buffer[0..], pos + value_size, segment.end, tail_size);
+
+    // Finally we can output the value in the middle of the head and the tail,
+    // where we have enough space to fit the whole trimmed value.
+    pos += output_sized(buffer[0..], pos, value, value_size);
+
+    // Now we add the tail size to the current position and terminate the output -
+    // basically, ensure that there is a '\0' at the end of the buffer.
+    pos += tail_size;
+    terminate_output(buffer[0..], pos);
+
+    // And now tell the caller how long the whole path would be.
+    return pos;
 }
 
 // pub fn guess_style(path: []const u8) Segment.Style {}
@@ -598,4 +858,18 @@ test "absolute too far" {
 
     try expect(length == 1);
     try expectEqualStrings("/", &buffer);
+}
+
+// --- SEGMENT TESTS -----------------------------------------------------------
+
+test "segment change overlap" {
+    const buffer = [_]u8{"C:\\this\\cool\\path"};
+    var segment: Segment = undefined;
+    set_style(.WINDOWS);
+
+    // if(!get_first_segment(buffer, &segment)
+    try expect(get_first_segment(buffer[0..], &segment));
+    try expect(get_next_segment(&segment));
+
+    change_segment(&segment, "longer_segment", buffer[0..]);
 }
