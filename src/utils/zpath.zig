@@ -5,6 +5,10 @@ const assert = std.debug.assert;
 var GLOBAL_PATH_STYLE: Segment.Style = if (builtin.os.tag == .windows) .WINDOWS else .UNIX;
 const PATH_SEPERATORS: []const []const u8 = &.{ "\\/", "/" };
 
+const ZWalkError = error {
+    InvalidPointerType,
+};
+
 pub const Segment = struct {
     const Type = enum { NORMAL, CURRENT, BACK };
     const Style = enum { WINDOWS, UNIX };
@@ -18,8 +22,10 @@ pub const Segment = struct {
     type: Type = undefined,
     style: Style = undefined,
 
+    const Self = @This();
+
     /// Function to get the next segment from a path
-    pub fn getNextSegment(self: *Segment) bool {
+    pub fn getNextSegment(self: *Self) bool {
         var c: [*]const u8 = self.begin + self.size;
 
         // First we jump to the end of the previous segment. It must be either
@@ -29,7 +35,7 @@ pub const Segment = struct {
 
         // Now we skip all separators until we reach something else.
         // Not yet guaranteed to have a segment as the string could end.
-        assert(isSeparator(c));
+        assert(isSeparator(c) catch false);
         while (isSeparator(c))
             c += 1;
 
@@ -49,12 +55,65 @@ pub const Segment = struct {
         return true;
     }
 
-    pub fn getPreviousSegment(_: *Segment) bool {
+    pub inline fn getPreviousSegment(self: *Self) bool {
+        const c = self.begin.ptr;
+
+        if(c <= self.segments.ptr)
+            return false;
+        
+        while(true) {
+            c -= 1;
+            if(c < self.segments.ptr)
+                return false;
+            if(!isSeperator(c))
+                break;
+        }
+
+        self.end = c + 1;
+        self.begin = findPreviousStop(self.segments, c);
+        self.updateSize();
+        // self.size = self.end - self.begin;
+
         return false;
     }
 
     pub inline fn getSegmentType(self: *Self) Type {
-        return self.type;
+        if(std.mem.eql(u8, self.begin[0..2], &.{".."}))
+            return .BACK;
+        if(self.begin[0] == '.')
+            return .CURRENT;
+        return .NORMAL;
+    }
+
+    pub fn changeSegment(self: *Self, value: []const u8, buffer: []u8) usize {
+        var pos = outputSized(buffer, 0, self.path, self.begin - self.path);
+        
+        while(isSeperator(value))
+            value += 1;
+        
+        var valueSize = 0;
+        while(value[valueSize])
+            valueSize += 1;
+        
+        while(valueSize > 0 and isSeperator(&value[valueSize - 1]))
+            valueSize -= 1;
+        
+        // We also have to determine the tail size,
+        // which is the part of the string following the current segment.
+        // The part will not change.
+        var tailSize = self.end.len;
+        
+        outputSized(buffer, pos + valueSize, self.end, tailSize);
+        pos += outputSized(buffer, pos, value);
+
+        pos += tailSize;
+        terminateOutput(buffer, pos);
+
+        return pos;
+    }
+
+    pub inline fn updateSize(self: *Self, sz: ?usize) void {
+        self.size = sz orelse self.end - self.begin;
     }
 };
 
@@ -238,26 +297,28 @@ fn output_sized(buffer: []u8, position: usize, str: []const u8, length: usize) u
     return length;
 }
 
-fn output_current(buffer: []u8, position: usize) usize {
+inline fn output_current(buffer: []u8, position: usize) usize {
     return output_sized(buffer, position, .{"."}[0..], 1);
 }
 
-fn output_back(buffer: []u8, position: usize) usize {
+inline fn output_back(buffer: []u8, position: usize) usize {
     return output_sized(buffer, position, &.{".."}, 2);
 }
 
-fn output_seperator(buffer: []u8, position: usize) usize {
+inline fn output_seperator(buffer: []u8, position: usize) usize {
     return output_sized(buffer, position, PATH_SEPERATORS[@intFromEnum(GLOBAL_PATH_STYLE)], 1);
 }
 
-fn output_dot(buffer: []u8, position: usize) usize {
+inline fn output_dot(buffer: []u8, position: usize) usize {
     return output_sized(buffer, position, &.{"."}, 1);
 }
 
-fn output(buffer: []u8, position: usize, str: []const u8) usize {
+inline fn output(buffer: []u8, position: usize, str: []const u8) usize {
     return output_sized(buffer, position, str, str.len);
 }
 
+// Appends a null string terminator character at the end of the buffer
+// probably should not be used unless dealing with explicit c style strings
 fn terminate_output(buffer: []u8, pos: usize) void {
     if (buffer.len > 0) {
         if (pos >= buffer.len) {
@@ -268,30 +329,66 @@ fn terminate_output(buffer: []u8, pos: usize) void {
     }
 }
 
-fn is_string_equal(first: []const u8, second: []const u8) bool {
-    if (first.len != second.len)
-        return false;
+fn is_string_equal(T: type, first: []T, second: []T) bool {
+    return 
+        first.len != second.len 
+        and std.mem.eql(T, first, second)
+        and true;
 
-    if (GLOBAL_PATH_STYLE == .UNIX)
-        return std.mem.eql(u8, first, second);
-
-    return true;
+    // if (first.len != second.len)
+    //     return false;
+    //
+    // if (GLOBAL_PATH_STYLE == .UNIX)
+    //     return std.mem.eql(u8, first, second);
+    //
+    // return true;
 }
 
 fn find_next_stop(c: []const u8) []const u8 {
+    // We just move forward until we find a seperator,
+    // which will be our next "stop".
     var i = 0;
-    while (!is_separator(c)) //: (i += 1)
+    while (!is_separator(c) and i < c.len) //: (i += 1)
         i += 1;
+    
+    // Return the pointer of the next stop.
     return c[i..];
 }
 
 // fn find_previous_stop(begin: []const u8, c: []const u8) []const u8 {
+//     // We just move back until we find a seperator or reach the beginning 
+//     // of the path, which will be our previous "stop".
 //     while (c.ptr > begin.ptr and !is_separator(c))
 //         c.ptr -= 1;
+//
 //     if (is_separator(c))
 //         c.ptr += 1;
+//
 //     return c;
 // }
+
+fn find_previous_stop(comptime T: type, begin: T, c: T) T {
+    switch (@typeInfo(T)) {
+        .Pointer => |P| switch(P.size) {
+            .Many => {
+                while(c > begin and !is_separator(c)) 
+                    c -= 1;
+                if(is_separator(c))
+                    c += 1;
+                return c;
+            },
+            .Slice => {
+                var p = c;
+                while(p.ptr > begin.ptr and !is_separator(p))
+                    p = p[1..];
+                if(is_seperator(p))
+                    p = p[1..];
+                return p;
+            },
+            else => return .InvalidPointerType,
+        },
+    }
+}
 
 // fn find_next_stop(c: []const u8) *u8 {
 // fn find_next_stop(c: []const u8) [*]u8 {
@@ -311,7 +408,7 @@ fn findNextStop(buf: []const u8) []const u8 {
     return c[idx..];
 }
 
-fn find_previous_stop(begin: *u8, c: *u8) *u8 {
+fn findPreviousStop(begin: *u8, c: *u8) *u8 {
     while (c > begin and !is_separator(c))
         c -= 1;
     return c + if (is_separator(c)) 1;
@@ -761,12 +858,33 @@ pub fn is_separator(str: [*]const u8) bool {
     return false;
 }
 
-pub fn isSeperator(str: []u8) bool {
+// pub fn isSeperator(str: []u8) bool {
+//     const sep = comptime PATH_SEPERATORS[@intFromEnum(GLOBAL_PATH_STYLE)];
+//
+//     for (sep, 0..str.len) |c, i|
+//         if (c == str[i])
+//             return true;
+//
+//     return false;
+// }
+
+pub fn isSeparator(comptime T: type, str: T) ZWalkError!bool {
     const sep = comptime PATH_SEPERATORS[@intFromEnum(GLOBAL_PATH_STYLE)];
 
-    for (sep, 0..str.len) |c, i|
-        if (c == str[i])
-            return true;
+    switch(@typeInfo(T)) {
+        .Pointer => |P| switch(P.size) {
+            .One => return str.* == sep[0],
+            .Many,
+            .Slice, 
+            => {
+                for(sep, 0..) |c,i| 
+                    if(c == str[i])
+                        return true;
+            },
+            else => return .InvalidPointerType,
+        },
+        else => return .InvalidPointerType,
+    }
 
     return false;
 }

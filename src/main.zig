@@ -38,14 +38,11 @@ pub fn main() !void {
                     try text_input.update(.{ .key_press = key });
                 }
             },
-
             .winsize => |ws| try global.vx.resize(alloc, global.tty.anyWriter(), ws),
-
             else => {},
         }
 
         const win = global.vx.window();
-        win.clear();
 
         const style = vaxis.Style{ .fg = .{ .index = 0 } };
 
@@ -60,6 +57,7 @@ pub fn main() !void {
             },
         });
 
+        // win.clear();
         text_input.draw(child);
         try global.vx.render(global.tty.anyWriter());
     }

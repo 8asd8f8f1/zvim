@@ -1,8 +1,10 @@
 const std = @import("std");
 const c = @cImport({
     @cInclude("notcurses/notcurses.h");
-    @cInclude("notcurses/wrappers.h");
+    @cInclude("wrappers.h");
 });
+
+pub usingnamespace @import("./common.zig");
 
 threadlocal var egc_buffer: [8191:0]u8 = undefined;
 threadlocal var key_string_buffer: [64]u8 = undefined;
@@ -249,7 +251,10 @@ pub const mod = struct {
 };
 
 pub fn key_string(ni: *const Input) []const u8 {
-    return if (ni.utf8[0] == 0) key_id_string(ni.id) else std.mem.span(@as([*:0]const u8, @ptrCast(&ni.utf8)));
+    return if (ni.utf8[0] == 0)
+        key_id_string(ni.id)
+    else
+        std.mem.span(@as([*:0]const u8, @ptrCast(&ni.utf8)));
 }
 
 pub fn key_id_string(k: u32) []const u8 {
@@ -529,8 +534,7 @@ pub fn ucs32_to_utf8(ucs32: []const u32, utf8: []u8) !usize {
 }
 
 // the following functions are workarounds for miscompilation of notcurses.h by cImport
-
-fn c__ncplane_putstr_yx(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_x: c_int, arg_gclusters: [*c]const u8) callconv(.C) c_int {
+pub fn c__ncplane_putstr_yx(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_x: c_int, arg_gclusters: [*c]const u8) callconv(.C) c_int {
     var n = arg_n;
     _ = &n;
     var y = arg_y;
@@ -546,12 +550,10 @@ fn c__ncplane_putstr_yx(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_x: c_int, a
         _ = &wcs;
         var cols: c_int = c.ncplane_putegc_yx(n, y, x, gclusters, &wcs);
         _ = &cols;
-        if (cols < @as(c_int, 0)) {
+        if (cols < @as(c_int, 0))
             return -ret;
-        }
-        if (wcs == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
+        if (wcs == @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))))
             break;
-        }
         y = -@as(c_int, 1);
         x = -@as(c_int, 1);
         gclusters += wcs;
@@ -559,14 +561,16 @@ fn c__ncplane_putstr_yx(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_x: c_int, a
     }
     return ret;
 }
-fn c__ncplane_putstr(arg_n: ?*c.struct_ncplane, arg_gclustarr: [*:0]const u8) callconv(.C) c_int {
+
+pub fn c__ncplane_putstr(arg_n: ?*c.struct_ncplane, arg_gclustarr: [*:0]const u8) callconv(.C) c_int {
     var n = arg_n;
     _ = &n;
     var gclustarr = arg_gclustarr;
     _ = &gclustarr;
     return c__ncplane_putstr_yx(n, -@as(c_int, 1), -@as(c_int, 1), gclustarr);
 }
-fn c__ncplane_putstr_aligned(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_align: c.ncalign_e, arg_s: [*c]const u8) callconv(.C) c_int {
+
+pub fn c__ncplane_putstr_aligned(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_align: c.ncalign_e, arg_s: [*c]const u8) callconv(.C) c_int {
     var n = arg_n;
     _ = &n;
     var y = arg_y;
@@ -582,8 +586,7 @@ fn c__ncplane_putstr_aligned(arg_n: ?*c.struct_ncplane, arg_y: c_int, arg_align:
     _ = c.ncstrwidth(s, &validbytes, &validwidth);
     var xpos: c_int = c.ncplane_halign(n, @"align", validwidth);
     _ = &xpos;
-    if (xpos < @as(c_int, 0)) {
+    if (xpos < @as(c_int, 0))
         xpos = 0;
-    }
     return c__ncplane_putstr_yx(n, y, xpos, s);
 }
