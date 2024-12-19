@@ -150,12 +150,12 @@ pub const Plane = struct {
     }
 
     /// Get the plane to which the plane 'n' is bound, if any.
-    pub fn parent(self: Self) Plane {
+    pub inline fn parent(self: Self) Plane {
         return .{ .n = c.ncplane_parent(self.n) orelse unreachable };
     }
 
     /// Return non-zero iff 'n' is a proper descendent of 'ancestor'.
-    pub fn descendant_p(self: Self, ancestor: Self) bool {
+    pub inline fn descendant_p(self: Self, ancestor: Self) bool {
         return c.ncplane_descendant_p(self.n, ancestor.n) != 0;
     }
 
@@ -176,12 +176,12 @@ pub const Plane = struct {
     }
 
     /// Splice ncplane 'n' out of the z-buffer; reinsert it at the top.
-    pub fn move_top(self: Self) void {
+    pub inline fn move_top(self: Self) void {
         _ = c.ncplane_move_below(self.n, null);
     }
 
     /// Splice ncplane 'n' out of the z-buffer; reinsert it at the bottom.
-    pub fn move_bottom(self: Self) void {
+    pub inline fn move_bottom(self: Self) void {
         _ = c.ncplane_move_above(self.n, null);
     }
 
@@ -190,7 +190,7 @@ pub const Plane = struct {
     /// reinserted planes. For a plane E bound to C, with z-ordering A B C D E,
     /// moving the C family to the top results in C E A B D, while moving it to
     /// the bottom results in A B D C E.
-    pub fn move_family_above(self: Self, targ: Self) void {
+    pub inline fn move_family_above(self: Self, targ: Self) void {
         _ = c.ncplane_move_family_above(self.n, targ.n);
     }
 
@@ -199,7 +199,7 @@ pub const Plane = struct {
     /// reinserted planes. For a plane E bound to C, with z-ordering A B C D E,
     /// moving the C family to the top results in C E A B D, while moving it to
     /// the bottom results in A B D C E.
-    pub fn move_family_below(self: Self, targ: Self) void {
+    pub inline fn move_family_below(self: Self, targ: Self) void {
         _ = c.ncplane_move_family_below(self.n, targ.n);
     }
 
@@ -208,7 +208,7 @@ pub const Plane = struct {
     /// reinserted planes. For a plane E bound to C, with z-ordering A B C D E,
     /// moving the C family to the top results in C E A B D, while moving it to
     /// the bottom results in A B D C E.
-    pub fn move_family_top(self: Self) void {
+    pub inline fn move_family_top(self: Self) void {
         _ = c.ncplane_move_family_below(self.n, null);
     }
 
@@ -217,23 +217,23 @@ pub const Plane = struct {
     /// reinserted planes. For a plane E bound to C, with z-ordering A B C D E,
     /// moving the C family to the top results in C E A B D, while moving it to
     /// the bottom results in A B D C E.
-    pub fn move_family_bottom(self: Self) void {
+    pub inline fn move_family_bottom(self: Self) void {
         _ = c.ncplane_move_family_above(self.n, null);
     }
 
     /// Return the plane below this one, or NULL if this is at the bottom.
-    pub fn below(self: Self) ?Self {
+    pub inline fn below(self: Self) ?Self {
         return .{ .n = c.ncplane_below(self.n) orelse return null };
     }
 
     /// Return the plane above this one, or NULL if this is at the top.
-    pub fn above(self: Self) ?Self {
+    pub inline fn above(self: Self) ?Self {
         return .{ .n = c.ncplane_above(self.n) orelse return null };
     }
 
     /// Effect |r| scroll events on the plane |n|. Returns an error if |n| is not
     /// a scrolling plane, and otherwise returns the number of lines scrolled.
-    pub fn scrollup(self: Self, r: c_int) c_int {
+    pub inline fn scrollup(self: Self, r: c_int) c_int {
         return c.ncplane_scrollup(self.n, r);
     }
 
@@ -241,16 +241,20 @@ pub const Plane = struct {
     /// error if |child| is not a child of |n|, or |n| is not scrolling, or |child|
     /// is fixed. Returns the number of scrolling events otherwise (might be 0).
     /// If the child plane is not fixed, it will likely scroll as well.
-    pub fn scrollup_child(self: Self, child: Plane) c_int {
+    pub inline fn scrollup_child(self: Self, child: Plane) c_int {
         return c.ncplane_scrollup_child(self.n, child.n);
     }
 
     /// Retrieve the current contents of the cell under the cursor into 'c'. This
     /// cell is invalidated if the associated plane is destroyed. Returns the number
     /// of bytes in the EGC, or -1 on error.
-    pub fn at_cursor_cell(self: Self, cell: *Cell) !usize {
+    pub inline fn at_cursor_cell(self: Self, cell: *Cell) !usize {
         const bytes_in_cell = c.ncplane_at_cursor_cell(self.n, cell);
-        return if (bytes_in_cell < 0) error.NCAtCellFailed else @intCast(bytes_in_cell);
+
+        return if (bytes_in_cell < 0)
+            error.NCAtCellFailed
+        else
+            @intCast(bytes_in_cell);
     }
 
     /// Retrieve the current contents of the specified cell into 'c'. This cell is
@@ -261,7 +265,10 @@ pub const Plane = struct {
     /// error to call this on a sprixel plane (unlike ncplane_at_yx()).
     pub fn at_yx_cell(self: Self, y_: c_int, x_: c_int, cell: *Cell) !usize {
         const bytes_in_cell = c.ncplane_at_yx_cell(self.n, y_, x_, cell);
-        return if (bytes_in_cell < 0) error.NCAtCellFailed else @intCast(bytes_in_cell);
+        return if (bytes_in_cell < 0)
+            error.NCAtCellFailed
+        else
+            @intCast(bytes_in_cell);
     }
 
     /// Return a heap-allocated copy of the plane's name, or NULL if it has none.
@@ -278,7 +285,7 @@ pub const Plane = struct {
     /// and the default channels/styles). All cells associated with this ncplane are
     /// invalidated, and must not be used after the call, *excluding* the base cell.
     /// The cursor is homed. The plane's active attributes are unaffected.
-    pub fn erase(self: Self) void {
+    pub inline fn erase(self: Self) void {
         c.ncplane_erase(self.n);
     }
 
@@ -305,7 +312,8 @@ pub const Plane = struct {
     ///  (0, 0, 0, 0): clears the plane in all cases
     pub fn erase_region(self: Self, ystart: isize, xstart: isize, ylen: isize, xlen: isize) !void {
         const ret = c.ncplane_erase_region(self.n, ystart, xstart, ylen, xlen);
-        if (ret != 0) return error.NCPEraseFailed;
+        if (ret != 0)
+            return error.NCPEraseFailed;
     }
 
     /// Set the ncplane's base nccell to 'c'. The base cell is used for purposes of
@@ -314,12 +322,15 @@ pub const Plane = struct {
     /// multicolumn EGC.
     pub fn set_base(self: Self, egc: [*:0]const u8, stylemask: u16, channels_: u64) !isize {
         const bytes_copied = c.ncplane_set_base(self.n, egc, stylemask, channels_);
-        return if (bytes_copied < 0) error.NCSetBaseFailed else @intCast(bytes_copied);
+        return if (bytes_copied < 0)
+            error.NCSetBaseFailed
+        else
+            @intCast(bytes_copied);
     }
 
     /// Extract the ncplane's base nccell into 'c'. The reference is invalidated if
     /// 'ncp' is destroyed.
-    pub fn base(self: Self, cell: *Cell) void {
+    pub inline fn base(self: Self, cell: *Cell) void {
         _ = c.ncplane_base(self.n, cell);
     }
 
@@ -334,7 +345,8 @@ pub const Plane = struct {
     /// bit, set it background-opaque, and clear the background default color bit.
     pub fn set_bg_palindex(self: Self, idx: c_uint) !void {
         const err = c.ncplane_set_bg_palindex(self.n, idx);
-        if (err != 0) return error.NCSetPalIndexFailed;
+        if (err != 0)
+            return error.NCSetPalIndexFailed;
     }
 
     /// Set the current foreground color using RGB specifications. If the
@@ -345,7 +357,8 @@ pub const Plane = struct {
     /// time using "color pairs"; Notcurses will manage color pairs transparently.
     pub fn set_fg_rgb(self: Self, channel: u32) !void {
         const err = c.ncplane_set_fg_rgb(self.n, channel);
-        if (err != 0) return error.NCSetRgbFailed;
+        if (err != 0)
+            return error.NCSetRgbFailed;
     }
 
     /// Set the current background color using RGB specifications. If the
@@ -356,18 +369,20 @@ pub const Plane = struct {
     /// time using "color pairs"; Notcurses will manage color pairs transparently.
     pub fn set_bg_rgb(self: Self, channel: u32) !void {
         const err = c.ncplane_set_bg_rgb(self.n, channel);
-        if (err != 0) return error.NCSetRgbFailed;
+        if (err != 0)
+            return error.NCSetRgbFailed;
     }
 
     /// Set the alpha parameters for ncplane 'n'.
     pub fn set_bg_alpha(self: Self, alpha: c_int) !void {
         const err = c.ncplane_set_bg_alpha(self.n, alpha);
-        if (err != 0) return error.NCSetAlphaFailed;
+        if (err != 0)
+            return error.NCSetAlphaFailed;
     }
 
     /// Set the alpha and coloring bits of the plane's current channels from a
     /// 64-bit pair of channels.
-    pub fn set_channels(self: Self, channels_: u64) void {
+    pub inline fn set_channels(self: Self, channels_: u64) void {
         c.ncplane_set_channels(self.n, channels_);
     }
 
@@ -376,7 +391,8 @@ pub const Plane = struct {
     /// standard plane.
     pub fn move_yx(self: Self, y_: c_int, x_: c_int) !void {
         const err = c.ncplane_move_yx(self.n, y_, x_);
-        if (err != 0) return error.NCPlaneMoveFailed;
+        if (err != 0)
+            return error.NCPlaneMoveFailed;
     }
 
     /// Replace the cell at the specified coordinates with the provided cell 'c',
@@ -385,11 +401,14 @@ pub const Plane = struct {
     /// 'c' must already be associated with 'n'. On failure, -1 is returned.
     pub fn putc_yx(self: Self, y_: c_int, x_: c_int, cell: *const Cell) !usize {
         const ret = c.ncplane_putc_yx(self.n, y_, x_, cell);
-        return if (ret < 0) error.NCPlanePutYZFailed else @intCast(ret);
+        return if (ret < 0)
+            error.NCPlanePutYZFailed
+        else
+            @intCast(ret);
     }
 
     /// Call ncplane_putc_yx() for the current cursor location.
-    pub fn putc(self: Self, cell: *const Cell) !usize {
+    pub inline fn putc(self: Self, cell: *const Cell) !usize {
         return self.putc_yx(-1, -1, cell);
     }
 
@@ -399,13 +418,19 @@ pub const Plane = struct {
     /// (though not beyond the end of the plane); this number is returned on success.
     pub fn putstr(self: Self, gclustarr: [*:0]const u8) !usize {
         const ret = c.c__ncplane_putstr(self.n, gclustarr);
-        return if (ret < 0) error.NCPlanePutStrFailed else @intCast(ret);
+        return if (ret < 0)
+            error.NCPlanePutStrFailed
+        else
+            @intCast(ret);
     }
 
     /// Write an aligned series of EGCs to the current location, using the current style.
     pub fn putstr_aligned(self: Self, y_: c_int, align_: c.Align, s: [*:0]const u8) !usize {
         const ret = c.c__ncplane_putstr_aligned(self.n, y_, @intFromEnum(align_), s);
-        return if (ret < 0) error.NCPlanePutStrFailed else @intCast(ret);
+        return if (ret < 0)
+            error.NCPlanePutStrFailed
+        else
+            @intCast(ret);
     }
 
     /// Write a zig formatted series of EGCs to the current location, using the current style.
@@ -430,7 +455,7 @@ pub const Plane = struct {
     }
 
     /// Get the opaque user pointer associated with this plane.
-    pub fn userptr(self: Self) ?*anyopaque {
+    pub inline fn userptr(self: Self) ?*anyopaque {
         return c.ncplane_userptr(self.n);
     }
 
@@ -472,13 +497,13 @@ pub const Plane = struct {
 
     /// realign the plane 'n' against its parent, using the alignments specified
     /// with NCPLANE_OPTION_HORALIGNED and/or NCPLANE_OPTION_VERALIGNED.
-    pub fn realign(self: Self) void {
+    pub inline fn realign(self: Self) void {
         _ = c.ncplane_resize_realign(self.n);
     }
 
     /// Replace the ncplane's existing resizecb with 'resizecb' (which may be NULL).
     /// The standard plane's resizecb may not be changed.
-    pub fn set_resizecb(self: Self, resizecb: ?*const fn (?*c_plane) callconv(.C) c_int) void {
+    pub inline fn set_resizecb(self: Self, resizecb: ?*const fn (?*c_plane) callconv(.C) c_int) void {
         return c.ncplane_set_resizecb(self.n, resizecb);
     }
 
@@ -487,7 +512,8 @@ pub const Plane = struct {
     /// move would place the cursor outside the plane.
     pub fn cursor_move_yx(self: Self, y_: c_int, x_: c_int) !void {
         const err = c.ncplane_cursor_move_yx(self.n, y_, x_);
-        if (err != 0) return error.NCPlaneCursorMoveFailed;
+        if (err != 0)
+            return error.NCPlaneCursorMoveFailed;
     }
 
     /// Move the cursor relative to the current cursor position (the cursor needn't
@@ -495,57 +521,58 @@ pub const Plane = struct {
     /// plane's dimensions.
     pub fn cursor_move_rel(self: Self, y_: c_int, x_: c_int) !void {
         const err = c.ncplane_cursor_move_rel(self.n, y_, x_);
-        if (err != 0) return error.NCPlaneCursorMoveFailed;
+        if (err != 0)
+            return error.NCPlaneCursorMoveFailed;
     }
 
     /// Move the cursor to 0, 0.
-    pub fn home(self: Self) void {
+    pub inline fn home(self: Self) void {
         c.ncplane_home(self.n);
     }
 
     /// Get the current position of the cursor within n. y and/or x may be NULL.
-    pub fn cursor_yx(self: Self, noalias y_: *c_uint, noalias x_: *c_uint) void {
+    pub inline fn cursor_yx(self: Self, noalias y_: *c_uint, noalias x_: *c_uint) void {
         c.ncplane_cursor_yx(self.n, y_, x_);
     }
 
     /// Get the current y position of the cursor within n.
-    pub fn cursor_y(self: Self) c_uint {
+    pub inline fn cursor_y(self: Self) c_uint {
         return c.ncplane_cursor_y(self.n);
     }
 
     /// Get the current x position of the cursor within n.
-    pub fn cursor_x(self: Self) c_uint {
+    pub inline fn cursor_x(self: Self) c_uint {
         return c.ncplane_cursor_x(self.n);
     }
 
     /// Get the current colors and alpha values for ncplane 'n'.
-    pub fn channels(self: Self) u64 {
+    pub inline fn channels(self: Self) u64 {
         return c.ncplane_channels(self.n);
     }
 
     /// Get the current styling for the ncplane 'n'.
-    pub fn styles(self: Self) u16 {
+    pub inline fn styles(self: Self) u16 {
         return c.ncplane_styles(self.n);
     }
 
     /// Set the specified style bits for the ncplane 'n', whether they're actively
     /// supported or not.
-    pub fn set_styles(self: Self, stylebits: c_uint) void {
+    pub inline fn set_styles(self: Self, stylebits: c_uint) void {
         c.ncplane_set_styles(self.n, stylebits);
     }
 
     /// Add the specified styles to the ncplane's existing spec.
-    pub fn on_styles(self: Self, stylebits: c_uint) void {
+    pub inline fn on_styles(self: Self, stylebits: c_uint) void {
         c.ncplane_on_styles(self.n, stylebits);
     }
 
     /// Remove the specified styles from the ncplane's existing spec.
-    pub fn off_styles(self: Self, stylebits: c_uint) void {
+    pub inline fn off_styles(self: Self, stylebits: c_uint) void {
         c.ncplane_off_styles(self.n, stylebits);
     }
 
     /// Initialize a cell with the planes current style and channels
-    pub fn cell_init(self: Self) Cell {
+    pub inline fn cell_init(self: Self) Cell {
         return .{
             .gcluster = 0,
             .gcluster_backstop = 0,
@@ -558,7 +585,7 @@ pub const Plane = struct {
     /// Breaks the UTF-8 string in 'gcluster' down, setting up the nccell 'c'.
     /// Returns the number of bytes copied out of 'gcluster', or -1 on failure. The
     /// styling of the cell is left untouched, but any resources are released.
-    pub fn cell_load(self: Self, cell: *Cell, gcluster: [:0]const u8) !usize {
+    pub inline fn cell_load(self: Self, cell: *Cell, gcluster: [:0]const u8) !usize {
         const ret = c.nccell_load(self.n, cell, gcluster);
         return if (ret < 0) error.NCCellLoadFailed else @intCast(ret);
     }

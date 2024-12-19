@@ -100,8 +100,11 @@ fn resize(ctx: nc.Context, n: nc.Plane) !void {
 }
 
 const JitterTest = struct {
-    const eighths_l = [_][]const u8{ "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" };
-    const eighths_r = [_][]const u8{ " ", "▕", "🮇", "🮈", "▐", "🮉", "🮊", "🮋" };
+    // const eighths_l = [_][]const u8{ "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" };
+    // const eighths_r = [_][]const u8{ " ", "▕", "🮇", "🮈", "▐", "🮉", "🮊", "🮋" };
+
+    const eighths_l = [_][]const u8{ "█", "▉", "▌" };
+    const eighths_r = [_][]const u8{ " ", "▕", "▐" };
     const eighths_c = eighths_l.len;
 
     const size: c_int = 20;
